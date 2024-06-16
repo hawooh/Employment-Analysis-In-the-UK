@@ -1,0 +1,317 @@
+---
+title: "Employment Rate Analysis"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code.
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*.
+
+```{r}
+# Remove all variables stored previously
+rm(list=ls())
+```
+
+```{r}
+# Load required libraries
+library(readxl) # For reading Excel files
+library(dplyr) # For data manipulation
+library(stringr) # Loading the stringr package for string manipulation
+library(ggplot2) # Loading the ggplot2 package for data visualization
+library(reshape2)
+```
+
+```{r}
+# Read the dataset
+data <- read_excel("./data/employment.xlsx")
+```
+
+```{r}
+# Summary statistics of the dataset
+summary(data)
+```
+
+```{r}
+# Filtering the dataset for the specified time period
+data <- data %>%
+  filter(time_period >= 2012 & time_period <= 2022)
+```
+
+```{r}
+# Displaying the first few rows of the filtered dataset
+head(data)
+```
+
+```{r}
+# checking the dataset shape (number of rows and columns)
+dim(data)
+```
+
+```{r}
+# Checking for null values in the data
+colSums(is.na(data))
+```
+
+```{r}
+# Removing unwanted columns from the data
+data <- select(data, -country_code, -time_identifier, -geographic_level, -country_name)
+
+head(data)
+```
+
+```{r}
+# Cleaning the age_group values
+data$age_group <- str_extract(data$age_group, "\\d+-\\d+")
+head(data)
+```
+
+```{r}
+# Moving Employment_rate column to the last column
+Employment_rate <- data$Employment_rate
+data <- data[, !names(data) %in% "Employment_rate"]
+data <- cbind(data, Employment_rate)
+
+head(data)
+```
+
+```{r}
+# Creating a boxplot to identify Outliers
+ggplot(data, aes(x = "", y = Employment_rate)) +
+  geom_boxplot() +
+  geom_boxplot(aes(y = High_skill_emp_rate), fill = "blue", alpha = 0.5) +
+  geom_boxplot(aes(y = Unemployment_rate), fill = "red", alpha = 0.5) +
+  geom_boxplot(aes(y = inactivity_rate), fill = "green", alpha = 0.5) +
+  geom_boxplot(aes(y = med_low_skill), fill = "orange", alpha = 0.5) +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Box plot to Show Outliers",
+    x = NULL,
+    y = NULL
+  )
+```
+
+```{r}
+# Columns to handle outliers
+columns_to_handle_outliers <- c('Employment_rate', 'High_skill_emp_rate', 'Unemployment_rate', 'inactivity_rate', 'med_low_skill')
+
+# Iterate over each column
+for (column in columns_to_handle_outliers) {
+  # Calculate quartiles
+  Q1 <- quantile(data[[column]], 0.25, na.rm = TRUE)
+  Q3 <- quantile(data[[column]], 0.75, na.rm = TRUE)
+  
+  # Calculate IQR
+  IQR <- Q3 - Q1
+  
+  # Define lower and upper bounds for outliers
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  # Identify outliers
+  outliers <- data[(data[[column]] < lower_bound) | (data[[column]] > upper_bound), column]
+  
+  # Replace outliers with NA
+  data[[column]][outliers] <- NA
+}
+```
+
+```{r}
+# Checking for null values in the data
+colSums(is.na(data))
+```
+
+```{r}
+# Removing rows with NA values
+data <- na.omit(data)
+```
+
+```{r}
+# Checking for unique values in each column for inconsistencies
+for (column in names(data)) {
+  unique_values <- unique(data[[column]])
+  print(paste("Unique values in", column, ":", unique_values))
+}
+```
+
+```{r}
+# Columns to standardize
+columns_to_standardize <- c('Employment_rate', 'High_skill_emp_rate', 'Unemployment_rate', 'inactivity_rate', 'med_low_skill')
+# Apply StandardScaler to the selected columns
+data[columns_to_standardize] <- scale(data[columns_to_standardize])
+
+# Print the first few rows of the data
+head(data)
+```
+
+```{r}
+# Encode categorical variables
+data$age_group_encoded <- as.numeric(factor(data$age_group))
+data$graduate_type_encoded <- as.numeric(factor(data$graduate_type))
+
+# Print the first few rows of the data
+head(data)
+```
+
+## Exploratory Data Analysis (EDA)
+
+```{r}
+# Define colors for each age group
+colors <- c('blue', 'green', 'red', 'orange', 'purple', 'pink', 'cyan')
+
+# Group by age_group and calculate mean employment rate
+mean_employment_rate <- aggregate(Employment_rate ~ age_group, data, FUN = mean)
+
+# Plot the bar chart
+ggplot(mean_employment_rate, aes(x = age_group, y = Employment_rate, fill = age_group)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = colors) +
+  labs(
+    title = "Employment Rate Across Different Age Groups",
+    x = "Age Group",
+    y = "Employment Rate"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+# Group by graduate_type and calculate mean employment rate
+mean_employment_rate <- aggregate(Employment_rate ~ graduate_type, data, FUN = mean)
+
+# Plot the bar chart
+ggplot(mean_employment_rate, aes(x = graduate_type, y = Employment_rate, fill = graduate_type)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Employment Rate Across Different Graduate Types",
+    x = "Graduate Type",
+    y = "Employment Rate"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Plot the scatter plot
+ggplot(data, aes(x = graduate_type, y = Employment_rate, color = age_group)) +
+  geom_point(size = 3) +
+  labs(
+    title = "Employment Rate by Graduate Type and Age Group",
+    x = "Graduate Type",
+    y = "Employment Rate",
+    color = "Age Group"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+# Plot the time series plot
+ggplot(data, aes(x = time_period, y = Employment_rate, color = graduate_type)) +
+  geom_line() +
+  labs(
+    title = "Employment Rate Over Time by Graduate Type",
+    x = "Time Period",
+    y = "Employment Rate",
+    color = "Graduate Type"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+# Drop the original categorical columns after label encoding
+data_without_str <- data[, !(names(data) %in% c("age_group", "graduate_type"))]
+
+# Correlation matrix
+corr_matrix <- cor(data_without_str)
+corr_matrix
+```
+
+```{r}
+# Create a dataframe from the correlation matrix with proper column names
+corr_df <- as.data.frame(corr_matrix)
+corr_df <- cbind(Variable1 = rownames(corr_df), corr_df)
+rownames(corr_df) <- NULL
+
+# Melt the correlation matrix dataframe
+melted_corr <- melt(corr_df, id.vars = "Variable1")
+
+# Plot the heatmap
+ggplot(melted_corr, aes(x = Variable1, y = variable, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limits = c(-1, 1)) +
+  theme_minimal() +
+  labs(
+    title = "Correlation Matrix",
+    x = "Variables",
+    y = "Variables"
+  )
+```
+
+```{r}
+# Fit the ANOVA model
+model <- aov(Employment_rate ~ age_group + graduate_type, data = data)
+
+# Perform ANOVA
+anova_table <- summary(model)
+print(anova_table)
+```
+
+## Data Modelling - Linear Regression
+
+```{r}
+# Linear Regression
+
+# Define the independent variables (features) and the dependent variable (target)
+X <- data[, c("age_group_encoded", "graduate_type_encoded")]
+y <- data$Employment_rate
+
+# Split the data into training and testing sets
+set.seed(42) # Setting random seed for reproducibility
+train_indices <- sample(nrow(data), 0.8 * nrow(data)) # 80% for training
+X_train <- X[train_indices, ]
+y_train <- y[train_indices]
+X_test <- X[-train_indices, ]
+y_test <- y[-train_indices]
+
+# Initialize and fit the linear regression model
+model <- lm(Employment_rate ~ age_group_encoded + graduate_type_encoded, data = data)
+
+# Predict employment rate on the test set
+y_pred <- predict(model, newdata = X_test)
+
+# Evaluate the model's performance
+mse <- mean((y_test - y_pred)^2)
+
+# Print the mean squared error
+cat("Mean Squared Error:", mse, "\n")
+# Print the coefficients of the linear regression model
+cat("Intercept:", coef(model)[1], "\n")
+cat("Coefficients:", paste(coef(model)[-1], collapse = ", "), "\n")
+
+```
+
+```{r}
+# Calculate R-squared
+r_squared <- cor(y_test, y_pred)^2
+
+# Calculate RMSE
+rmse <- sqrt(mean((y_test - y_pred)^2))
+
+# Calculate MAE
+mae <- mean(abs(y_test - y_pred))
+
+# Print the results
+cat("R-squared:", r_squared, "\n")
+cat("Root Mean Squared Error (RMSE):", rmse, "\n")
+cat("Mean Absolute Error (MAE):", mae, "\n")
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
